@@ -1,71 +1,222 @@
 from __future__ import annotations
 
-import argparse
 import json
+import os
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Dict, List
 
-from igris.agent import CodingAgent
-
-
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Igris - Python AI Coding Assistant")
-    subparsers = parser.add_subparsers(dest="command", required=True)
-
-    plan_parser = subparsers.add_parser("plan", help="Break a task into implementation steps")
-    plan_parser.add_argument("prompt")
-
-    generate_parser = subparsers.add_parser("generate", help="Generate a starter project or code snippet")
-    generate_parser.add_argument("prompt")
-    generate_parser.add_argument("--language", default="python")
-    generate_parser.add_argument("--project-type", default="cli", choices=["cli", "web", "api"])
-
-    fix_parser = subparsers.add_parser("fix", help="Generate a bug-fix plan and patch")
-    fix_parser.add_argument("prompt")
-    fix_parser.add_argument("--language", default="python")
-
-    review_parser = subparsers.add_parser("review", help="Run a structured code review checklist")
-    review_parser.add_argument("prompt")
-
-    serve_parser = subparsers.add_parser("serve", help="Start the built-in web API")
-
-    return parser
+from igris.repo_tools import RepoTools
 
 
-def main() -> None:
-    parser = build_parser()
-    args = parser.parse_args()
-    agent = CodingAgent()
+@dataclass
+class TaskPlan:
+    objective: str
+    steps: List[str] = field(default_factory=list)
+    risks: List[str] = field(default_factory=list)
+    deliverables: List[str] = field(default_factory=list)
 
-    if args.command == "plan":
-        plan = agent.plan(args.prompt)
-        print(json.dumps({
+
+class CodingAgent:
+    """Igris is a Python coding assistant with local fallback logic and optional LLM integration."""
+
+    def __init__(self, api_key: str | None = None, model: str = "gpt-4o-mini"):
+        self.api_key = api_key or os.getenv("OPENAI_API_KEY")
+        self.model = model
+
+    def plan(self, prompt: str) -> TaskPlan:
+        if self.api_key:
+            return self._plan_via_llm(prompt)
+        return self._plan_locally(prompt)
+
+    def generate_code(self, prompt: str, language: str = "python", project_type: str = "cli") -> Dict[str, Any]:
+        if self.api_key:
+            return self._generate_via_llm(prompt, language, project_type)
+        return self._generate_locally(prompt, language, project_type)
+
+    def fix_bug(self, prompt: str, language: str = "python") -> Dict[str, Any]:
+        if self.api_key:
+            return self._fix_via_llm(prompt, language)
+        return {
+            "status": "ok",
+            "language": language,
+            "summary": "Bug-fix workflow prepared.",
+            "patch": self._fallback_fix(prompt, language),
+            "note": "No API key configured. This is a local-ready fix template.",
+        }
+
+    def review_code(self, prompt: str) -> Dict[str, Any]:
+        return {
+            "status": "ok",
+            "summary": f"Review prepared for: {prompt}",
+            "checks": [
+                "Validate input handling",
+                "Check for edge cases",
+                "Verify error paths",
+                "Ensure tests cover the main scenario",
+            ],
+            "notes": "This review mode is a structured sanity-check framework.",
+        }
+
+    def inspect_repo(self, repo_root: str = ".") -> Dict[str, Any]:
+        tools = RepoTools(repo_root)
+        return tools.scan_repo()
+
+    def patch_repo(self, repo_root: str, file_path: str, new_content: str) -> Dict[str, Any]:
+        tools = RepoTools(repo_root)
+        return tools.write_file(file_path, new_content)
+
+    def generate_tests(self, repo_root: str, file_path: str) -> Dict[str, Any]:
+        tools = RepoTools(repo_root)
+        return {
+            "status": "ok",
+            "file_path": file_path,
+            "test_stub": tools.generate_test_stub(file_path),
+        }
+
+    def remember(self, key: str, value: Any, repo_root: str = ".") -> Dict[str, Any]:
+        tools = RepoTools(repo_root)
+        return tools.save_memory(key, value)
+
+    def recall(self, repo_root: str = ".") -> Dict[str, Any]:
+        tools = RepoTools(repo_root)
+        return tools.load_memory()
+
+    def _plan_locally(self, prompt: str) -> TaskPlan:
+        normalized = prompt.strip() or "General coding task"
+        return TaskPlan(
+            objective=normalized,
+            steps=[
+                "Understand the requirement and identify the user goal.",
+                "Inspect the project structure and any affected files.",
+                "Implement the smallest correct solution.",
+                "Add or update validation or tests where needed.",
+                "Summarize the result and any assumptions.",
+            ],
+            risks=[
+                "Missing edge cases or constraints.",
+                "Unclear requirements may require follow-up questions.",
+                "Insufficient validation can leave regressions unnoticed.",
+            ],
+            deliverables=[
+                "Working implementation",
+                "Validation results",
+                "Short summary of the change",
+            ],
+        )
+
+    def _generate_locally(self, prompt: str, language: str, project_type: str) -> Dict[str, Any]:
+        project_type = project_type.lower()
+        if project_type == "web":
+            files = {
+                "app.py": self._template_web_app(prompt),
+                "requirements.txt": "fastapi==0.111.0\nuvicorn==0.30.3\n",
+            }
+        elif project_type == "api":
+            files = {
+                "main.py": self._template_api(prompt),
+                "requirements.txt": "fastapi==0.111.0\nuvicorn==0.30.3\n",
+            }
+        else:
+            files = {
+                "main.py": self._template_cli(prompt, language),
+                "requirements.txt": "",
+            }
+
+        return {
+            "status": "ok",
+            "language": language,
+            "project_type": project_type,
+            "summary": f"Generated starter code for: {prompt}",
+            "files": files,
+            "note": "No API key configured. Local fallback mode is active.",
+        }
+
+    def _generate_via_llm(self, prompt: str, language: str, project_type: str) -> Dict[str, Any]:
+        return self._generate_locally(prompt, language, project_type)
+
+    def _plan_via_llm(self, prompt: str) -> TaskPlan:
+        return self._plan_locally(prompt)
+
+    def _fix_via_llm(self, prompt: str, language: str) -> Dict[str, Any]:
+        return self.fix_bug(prompt, language)
+
+    def _template_cli(self, prompt: str, language: str) -> str:
+        if language.lower() == "python":
+            return (
+                'def main():\n'
+                f'    """Starter implementation for: {prompt}"""\n'
+                f'    print("This CLI was generated for: {prompt}")\n\n\n'
+                'if __name__ == "__main__":\n'
+                '    main()\n'
+            )
+
+        if language.lower() == "javascript":
+            return (
+                'function main() {\n'
+                f'  console.log("This CLI was generated for: {prompt}");\n'
+                '}\n\n'
+                'main();\n'
+            )
+
+        return f"// No template available for language: {language}"
+
+    def _template_web_app(self, prompt: str) -> str:
+        return (
+            'from fastapi import FastAPI\n\n'
+            'app = FastAPI()\n\n'
+            "@app.get('/')\n"
+            'def root():\n'
+            '    return {"message": "Hello from Igris", "task": "' + prompt.replace('"', '\\"') + '"}\n\n'
+            "@app.get('/health')\n"
+            'def health():\n'
+            '    return {"status": "ok"}\n'
+        )
+
+    def _template_api(self, prompt: str) -> str:
+        return (
+            'from fastapi import FastAPI\n\n'
+            'app = FastAPI(title="Igris API")\n\n'
+            "@app.get('/')\n"
+            'def root():\n'
+            '    return {"message": "AI-generated API from Igris", "task": "' + prompt.replace('"', '\\"') + '"}\n\n'
+            "@app.get('/health')\n"
+            'def health():\n'
+            '    return {"status": "ok"}\n'
+        )
+
+    def _fallback_fix(self, prompt: str, language: str) -> str:
+        if language.lower() == "python":
+            return '''
+# Fix strategy:
+# 1. Validate inputs before using them.
+# 2. Guard optional values and empty collections.
+# 3. Add a focused regression test.
+# 4. Keep the fix minimal and explicit.
+
+try:
+    value = data["key"]
+except KeyError:
+    value = None
+
+if value is None:
+    return "safe fallback"
+
+return value
+'''
+
+        return "// Add defensive validation and a regression test for the failing case."
+
+    def as_dict(self, plan: TaskPlan) -> Dict[str, Any]:
+        return {
             "objective": plan.objective,
             "steps": plan.steps,
             "risks": plan.risks,
             "deliverables": plan.deliverables,
-        }, indent=2))
-        return
-
-    if args.command == "generate":
-        result = agent.generate_code(args.prompt, args.language, args.project_type)
-        print(json.dumps(result, indent=2))
-        return
-
-    if args.command == "fix":
-        result = agent.fix_bug(args.prompt, args.language)
-        print(json.dumps(result, indent=2))
-        return
-
-    if args.command == "review":
-        result = agent.review_code(args.prompt)
-        print(json.dumps(result, indent=2))
-        return
-
-    if args.command == "serve":
-        from igris.web import app
-        import uvicorn
-        uvicorn.run(app, host="0.0.0.0", port=8000)
-        return
+        }
 
 
 if __name__ == "__main__":
-    main()
+    agent = CodingAgent()
+    plan = agent.plan("Create a task manager app")
+    print(json.dumps(agent.as_dict(plan), indent=2))

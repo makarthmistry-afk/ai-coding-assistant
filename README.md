@@ -1,80 +1,73 @@
-# Igris
+from __future__ import annotations
 
-Igris is a Python-based AI coding assistant designed to help with:
-- planning coding tasks
-- generating starter code
-- fixing bug reports
-- reviewing code for reliability
-- exposing a simple web API for interactive use
+import json
+from pathlib import Path
+from typing import Any, Dict, Iterable, List
 
-It is built as a practical starter project for a coding agent that can work in local fallback mode without an API key and can be upgraded to a real model later.
 
-## Features
+class RepoTools:
+    """Small repository utilities for scanning, patching, and generated test stubs."""
 
-- Python CLI tool for planning, generation, review, and bug-fix workflows
-- FastAPI web API for interactive use
-- Starter templates for CLI apps, APIs, and web apps
-- Fallback logic when no external AI provider is configured
-- Extendable architecture for future LLM integration, repo scanning, and project patching
+    def __init__(self, repo_root: str = "."):
+        self.root = Path(repo_root).resolve()
 
-## Quick start
+    def scan_repo(self) -> Dict[str, Any]:
+        files = []
+        for path in sorted(self.root.rglob("*")):
+            if path.is_file():
+                rel = path.relative_to(self.root).as_posix()
+                files.append(rel)
+        return {
+            "status": "ok",
+            "repo_root": str(self.root),
+            "total_files": len(files),
+            "files": files[:200],
+            "summary": {
+                "python": sum(1 for f in files if f.endswith(".py")),
+                "markdown": sum(1 for f in files if f.endswith(".md")),
+                "config": sum(1 for f in files if f.endswith((".json", ".toml", ".yaml", ".yml"))),
+            },
+        }
 
-1. Create a virtual environment
-   ```bash
-   python -m venv .venv
-   source .venv/bin/activate
-   ```
+    def read_file(self, file_path: str) -> str:
+        target = (self.root / file_path).resolve()
+        return target.read_text(encoding="utf-8")
 
-2. Install dependencies
-   ```bash
-   pip install -r requirements.txt
-   ```
+    def write_file(self, file_path: str, content: str) -> Dict[str, Any]:
+        target = (self.root / file_path).resolve()
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+        return {
+            "status": "ok",
+            "path": file_path,
+            "updated": True,
+        }
 
-3. Plan a task
-   ```bash
-   python -m igris.cli plan "Build a login page in Flask"
-   ```
+    def generate_test_stub(self, file_path: str) -> str:
+        if not file_path.endswith(".py"):
+            return "# No Python test stub generated for a non-Python file."
 
-4. Generate a starter app
-   ```bash
-   python -m igris.cli generate "Create a Python CLI that reads a CSV file" --language python --project-type cli
-   ```
+        module_name = file_path.replace("/", ".").replace("\\", ".")[:-3]
+        if module_name.startswith("."):
+            module_name = module_name[1:]
+        return (
+            "import pytest\n\n"
+            f"from {module_name} import *\n\n\n"
+            "def test_smoke():\n"
+            "    assert True\n"
+        )
 
-5. Fix a bug report
-   ```bash
-   python -m igris.cli fix "The app crashes when a required field is missing" --language python
-   ```
+    def save_memory(self, key: str, value: Any) -> Dict[str, Any]:
+        memory_dir = self.root / ".igris"
+        memory_dir.mkdir(parents=True, exist_ok=True)
+        memory_file = memory_dir / "memory.json"
+        data = json.loads(memory_file.read_text(encoding="utf-8")) if memory_file.exists() else {}
+        data[key] = value
+        memory_file.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        return {"status": "ok", "key": key, "value": value, "path": str(memory_file)}
 
-6. Launch the web API
-   ```bash
-   python -m igris.cli serve
-   ```
-
-Then visit:
-- http://localhost:8000/health
-- http://localhost:8000/docs
-
-## Project structure
-
-```text
-igris/
-    __init__.py
-    __main__.py
-    agent.py
-    cli.py
-    templates.py
-    web.py
-main.py
-requirements.txt
-README.md
-```
-
-## Notes
-
-- This works in local demo mode without an API key.
-- To connect to a real model, set `OPENAI_API_KEY` and plug it into the LLM hooks inside `igris/agent.py`.
-- Igris is designed to be a strong foundation for a more advanced autonomous coding agent.
-
-## License
-
-MIT
+    def load_memory(self) -> Dict[str, Any]:
+        memory_file = self.root / ".igris" / "memory.json"
+        if not memory_file.exists():
+            return {"status": "ok", "memory": {}}
+        return {"status": "ok", "memory": json.loads(memory_file.read_text(encoding="utf-8"))}
