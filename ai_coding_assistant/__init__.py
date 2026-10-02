@@ -1,3 +1,5 @@
-# AI Coding Assistant
+"""AI Coding Assistant package."""
 
-A starter project for an autonomous coding assistant built in Python.
+__all__ = ["CodingAgent"]
+
+from .agent import CodingAgent

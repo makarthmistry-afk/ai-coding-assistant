@@ -1,23 +1,23 @@
 # AI Coding Assistant
 
-A practical coding-focused AI project that can:
-- understand a coding task
-- plan the work
-- generate project files or code snippets
-- propose fixes for bugs
-- scaffold starter apps
-- review code quality
+A combined coding AI project that brings together:
+- planning a coding task
+- generating code and starter projects
+- fixing bugs with guarded patch suggestions
+- reviewing code quality
+- running a small web API for interactive use
+- supporting a CLI workflow for terminal use
 
-This repository is a strong starting point for an agent-style coding assistant. It is intentionally simple, readable, and extendable so you can connect it to real LLM providers later.
+This repo is designed as a practical "all-in-one" coding assistant starter.
+It is intentionally simple, readable, and extensible so you can attach a real LLM provider later.
 
 ## Features
 
-- CLI-based workflow for coding tasks
-- Task planning and breakdown
-- Code generation templates for common app patterns
-- Optional OpenAI integration
-- Local fallback mode when no API key is configured
-- Easy extension points for adding GitHub repo inspection, IDE integration, or a web UI
+- CLI workflow for planning, generating, and fixing tasks
+- Web API for interactive project generation and analysis
+- Starter project templates for CLI apps, REST APIs, and web apps
+- Local fallback logic when no AI provider key is configured
+- Easy extension points for GitHub repo reading, LLM APIs, tests, and dashboards
 
 ## Quick start
 
@@ -32,27 +32,38 @@ This repository is a strong starting point for an agent-style coding assistant. 
    pip install -r requirements.txt
    ```
 
-3. Run the assistant
+3. Run the CLI planner
    ```bash
    python -m ai_coding_assistant.cli plan "Build a login page in Flask"
    ```
 
-   Or generate a starter app:
+4. Generate a starter project
    ```bash
-   python -m ai_coding_assistant.cli generate "Create a Python CLI that reads a CSV and prints summary stats" --language python
+   python -m ai_coding_assistant.cli generate "Create a Python script that reads CSV files" --language python --project-type cli
    ```
 
-   Or review a bug:
+5. Fix a bug description
    ```bash
-   python -m ai_coding_assistant.cli fix "Fix the bug where the app crashes when a CSV row is missing a value" --language python
+   python -m ai_coding_assistant.cli fix "The app crashes when a required field is missing" --language python
    ```
+
+6. Launch the web API
+   ```bash
+   python -m ai_coding_assistant.cli serve
+   ```
+
+Then open:
+- http://localhost:8000/health
+- http://localhost:8000/docs
 
 ## Example commands
 
 ```bash
-python -m ai_coding_assistant.cli plan "Create a REST API for todo items"
-python -m ai_coding_assistant.cli generate "Create a Python script that fetches weather data from an API" --language python
-python -m ai_coding_assistant.cli fix "The app throws a KeyError on empty API response" --language python
+python -m ai_coding_assistant.cli plan "Create a REST API for task management"
+python -m ai_coding_assistant.cli generate "Create a small web dashboard for sales metrics" --project-type web
+python -m ai_coding_assistant.cli generate "Create a FastAPI service for users" --project-type api
+python -m ai_coding_assistant.cli fix "Fix missing value handling in the CSV parser" --language python
+python -m ai_coding_assistant.cli review "Check the script for reliability and edge cases"
 ```
 
 ## Project structure
@@ -63,6 +74,7 @@ ai_coding_assistant/
     agent.py
     cli.py
     templates.py
+    web.py
 main.py
 requirements.txt
 README.md
@@ -70,18 +82,18 @@ README.md
 
 ## Notes
 
-- The project works in demo mode without an API key.
-- To enable real LLM-backed generation, set `OPENAI_API_KEY` and update `agent.py` to call your preferred provider.
-- This repo is designed as a foundation for a more advanced coding agent, not as a magical "codes everything" system by itself.
+- This works in local demo mode without an API key.
+- To connect to a real LLM, set `OPENAI_API_KEY` and update the API call logic in `agent.py`.
+- The web service exposes a simple interactive layer while the CLI gives you quick terminal workflows.
 
 ## Roadmap
 
-- add repo-aware file reading and patching
-- add GitHub integration
-- add test-generation workflow
-- add a web dashboard
-- add multi-file code editing
-- add agent memory and project context
+- repo-aware file reading and patching
+- GitHub integration
+- multi-file editing
+- smarter context memory
+- support for more templates and frameworks
+- automatic test generation
 
 ## License
 
